@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lightboard — the make.fun board, bounty, leaderboard and profiles</title>
+<style>
+:root{--ink:#14102a;--mut:#5d5773;--line:#e2def0;--bg:#f6f5fa;--card:#fff;--acc:#4b38c3;--acc2:#ece8ff;--good:#067647;--bad:#b42318}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 -apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color:var(--ink);background:var(--bg)}
+a{color:var(--acc);text-decoration:none}
+a:hover{text-decoration:underline}
+.hd{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--line)}
+.brand{font-size:17px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+.brand b{color:var(--acc)}
+.hd nav{margin-left:auto;display:flex;gap:14px;align-items:center}
+.lookup{display:flex;gap:6px}
+.lookup input{width:180px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px}
+button{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--acc);background:var(--acc);color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer}
+.strip{display:flex;align-items:center;gap:10px;padding:6px 16px;background:#171233;color:#e9e5ff;font-size:12.5px}
+.strip b{color:#fff}
+.strip button{margin-left:auto;background:transparent;border-color:#8f83e0;color:#fff;padding:3px 10px}
+.strategy,main,footer{max-width:1360px;margin:0 auto}
+.strategy{padding:5px 16px 0;color:var(--mut);font-size:12px}
+main{padding:14px 16px 8px}
+.note{font-size:12.5px;color:var(--mut)}
+.err{border:1px solid var(--bad);color:var(--bad);background:#fef3f2;border-radius:9px;padding:10px 12px}
+footer{padding:4px 16px 18px;color:var(--mut);font-size:12.5px}
+</style>
+</head>
+<body>
+<header class="hd">
+<a class="brand" href="#/">make.fun <b>lightboard</b></a>
+<nav>
+<a href="#/">Board</a>
+<form class="lookup" id="lookup"><input id="handle" type="text" placeholder="Profile handle, e.g. mangkarones" aria-label="Profile handle"><button type="submit">Open profile</button></form>
+</nav>
+</header>
+<div class="strip"><span id="strip">this view: warming up…</span><button id="refresh" type="button">Refresh</button></div>
+<p class="strategy">First load is this page alone — every view arrives by import(). ETag-revalidated cache · in-flight dedupe · rows patched in place · windowed leaderboard</p>
+<main id="view"><p class="note">Loading…</p></main>
+<footer>Read-only: every figure is read live from make.fun's public API. Nothing signs in, nothing writes.</footer>
+<script type="module">
+// Lightboard's boot: a router and nothing else — every view arrives
+// by literal import(), so the first load stays this one page.
+const view = document.getElementById('view');
+let seq = 0;
+
+function parse() {
+  const p = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
+  if (p[0] === 'bounty' && p[1] && p[2] === 'leaderboard') return ['leaderboard', p[1]];
+  if (p[0] === 'bounty' && p[1]) return ['bounty', p[1]];
+  if (p[0] === 'u' && p[1]) return ['profile', p[1]];
+  if (p[0] === 'board') return ['board', p[1] || null];
+  return ['board', null];
+}
+
+const loaders = {
+  board: () => import('./board.js'),
+  bounty: () => import('./bounty.js'),
+  leaderboard: () => import('./leaderboard.js'),
+  profile: () => import('./profile.js'),
+};
+
+async function go() {
+  const mine = ++seq;
+  window.__shotReady = false;
+  const [name, arg] = parse();
+  try {
+    const net = await import('./net.js');
+    if (mine !== seq) return;
+    net.beginView();
+    const mod = await loaders[name]();
+    if (mine !== seq) return;
+    await mod.render(view, arg);
+  } catch (e) {
+    if (mine !== seq) return;
+    view.innerHTML = '<div class="err">This view could not load. <a href="#/">Back to the board</a></div>';
+    window.__shotReady = true;
+  }
+}
+
+document.getElementById('lookup').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const h = document.getElementById('handle').value.trim().replace(/^@/, '');
+  if (h) location.hash = '#/u/' + encodeURIComponent(h);
+});
+document.getElementById('refresh').addEventListener('click', async () => {
+  const net = await import('./net.js');
+  net.forceNext();
+  go();
+});
+addEventListener('hashchange', go);
+go();
+</script>
+</body>
+</html>
